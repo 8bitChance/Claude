@@ -53,6 +53,11 @@
   table.grid td { padding:0; }
   table.grid button.cell { width:100%; padding:12px 6px; border-radius:6px; font-weight:600; border:2px solid transparent; color:#10202b; }
   table.grid button.cell[aria-pressed="true"] { border-color:var(--ink); }
+  table.per { width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums; }
+  table.per th, table.per td { padding:6px 8px; text-align:right; border-bottom:1px solid var(--line); font-size:14px; }
+  table.per th:first-child, table.per td:first-child { text-align:left; font-weight:500; }
+  table.per thead th { font-size:12px; color:var(--muted); }
+  table.per tr.total td { font-weight:700; border-top:2px solid var(--ink); }
   .bar { display:flex; height:30px; border-radius:6px; overflow:hidden; background:var(--line); }
   .bar span { height:100%; }
   .legend { display:flex; flex-wrap:wrap; gap:6px 14px; margin-top:8px; font-size:12px; }
@@ -114,6 +119,9 @@
       <h2 id="selTitle">Selected scenario</h2>
       <div class="cards" id="stats"></div>
       <div id="flag"></div>
+      <h3>Per-period breakdown</h3>
+      <div style="overflow-x:auto"><table class="per" id="per"></table></div>
+      <p class="hint">Bi-weekly = yearly &divide; 26 paychecks. Monthly = yearly &divide; 12. Monthly bills are converted from your monthly inputs, so two bi-weekly months a year have a third paycheck.</p>
       <h3>Where the year's gross pay goes</h3>
       <div class="bar" id="bar" role="img" aria-label="Breakdown of gross income"></div>
       <div class="legend" id="legend"></div>
@@ -296,11 +304,18 @@ function renderResults() {
   const cls = v => v < 0 ? 'neg' : 'pos';
   $('stats').innerHTML = [
     ['Disposable / month', `<span class="${cls(r.monthly)}">${usd(r.monthly)}</span>`],
+    ['Disposable / bi-weekly', `<span class="${cls(r.disposable)}">${usd(r.disposable / 26)}</span>`],
     ['Disposable / year', `<span class="${cls(r.disposable)}">${usd(r.disposable)}</span>`],
     ['Take-home / month', usd(r.net / 12)],
+    ['Take-home / bi-weekly', usd(r.net / 26)],
     ['Left of take-home', `${(r.savingsRate * 100).toFixed(0)}%`],
     ['Gross / year', usd(r.gross)]
   ].map(([k, v]) => `<div class="stat"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('');
+
+  const lines = [['Gross pay', r.gross], ['Federal tax', -r.fed], ['FICA', -r.fica], ['401(k) + health', -(r.k401 + r.health)],
+    ['Take-home', r.net, 1], ['Housing', -r.housing], ['Debt payments', -r.debt], ['Living costs', -r.living], ['Disposable income', r.disposable, 1]];
+  $('per').innerHTML = '<thead><tr><th></th><th>Bi-weekly</th><th>Monthly</th><th>Yearly</th></tr></thead><tbody>' +
+    lines.map(([n, v, t]) => `<tr class="${t ? 'total' : ''}"><td>${n}</td><td class="${v < 0 && t ? 'neg' : ''}">${usd(v / 26)}</td><td class="${v < 0 && t ? 'neg' : ''}">${usd(v / 12)}</td><td class="${v < 0 && t ? 'neg' : ''}">${usd(v)}</td></tr>`).join('') + '</tbody>';
 
   let flag = '';
   if (r.gross === 0) flag = `<div class="flag">No income selected for this pairing.</div>`;
