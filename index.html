@@ -91,16 +91,30 @@
       <button class="primary" data-add="wife">+ Add career for her</button>
     </div>
     <div class="card">
-      <h2>Monthly expenses (shared)</h2>
+      <h2>Shared monthly expenses</h2>
       <label for="housing">Rent / mortgage</label>
       <input id="housing" type="number" min="0" step="50">
       <p class="hint">If a career has a housing override (e.g. different city), your career's override is used first, then your wife's.</p>
       <h3>Debt payments</h3>
       <div id="debts"></div>
-      <button id="addDebt">+ Add debt</button>
+      <button data-addl="debts">+ Add debt</button>
       <h3>Living costs</h3>
       <div id="living"></div>
-      <button id="addLiving">+ Add cost</button>
+      <button data-addl="living">+ Add cost</button>
+      <h3>Split of shared expenses</h3>
+      <div class="row"><div><label for="youShare">Your share (%)</label><input id="youShare" type="number" min="0" max="100" step="1"></div>
+        <div><label>Wife's share</label><input id="wifeShare" disabled></div></div>
+      <p class="hint">Rent and shared debts/costs are split by these percentages for the per-person results. Default is 50/50.</p>
+    </div>
+    <div class="card">
+      <h2>Your personal monthly expenses</h2>
+      <h3>Debt payments</h3><div id="you-debts"></div><button data-addl="you.debts">+ Add debt</button>
+      <h3>Living costs</h3><div id="you-living"></div><button data-addl="you.living">+ Add cost</button>
+    </div>
+    <div class="card">
+      <h2>Wife's personal monthly expenses</h2>
+      <h3>Debt payments</h3><div id="wife-debts"></div><button data-addl="wife.debts">+ Add debt</button>
+      <h3>Living costs</h3><div id="wife-living"></div><button data-addl="wife.living">+ Add cost</button>
       <p class="hint">Reality check: most people underestimate living costs. Use your last 3 months of bank/card statements.</p>
     </div>
     <div class="card">
@@ -131,7 +145,11 @@
       <h2 id="selTitle">Selected scenario</h2>
       <div class="cards" id="stats"></div>
       <div id="flag"></div>
-      <h3>Per-period breakdown</h3>
+      <h3>You vs. your wife</h3>
+      <div class="seg" id="periodSeg" role="group" aria-label="Period">
+        <button data-period="26">Bi-weekly</button><button data-period="12">Monthly</button><button data-period="1">Yearly</button></div>
+      <div style="overflow-x:auto;margin-top:8px"><table class="per" id="who"></table></div>
+      <h3>Household per-period breakdown</h3>
       <div style="overflow-x:auto"><table class="per" id="per"></table></div>
       <p class="hint">Bi-weekly = yearly &divide; 26 paychecks. Monthly = yearly &divide; 12. Monthly bills are converted from your monthly inputs, so two bi-weekly months a year have a third paycheck.</p>
       <h3>Where the year's gross pay goes</h3>
@@ -208,11 +226,28 @@ function calc(careerA, careerB, exp) {
   const net = gross - k401 - health - fed - fica; // annual take-home
   const ov = (careerA && num(careerA.housing)) || (careerB && num(careerB.housing)) || 0;
   const housing = (ov || num(exp.housing)) * 12;
-  const debt = exp.debts.reduce((s, d) => s + num(d.amount), 0) * 12;
-  const living = exp.living.reduce((s, d) => s + num(d.amount), 0) * 12;
+  const sum = l => (l || []).reduce((s, d) => s + num(d.amount), 0) * 12;
+  const P = exp.personal || { you: {}, wife: {} };
+  const sharedDebt = sum(exp.debts), sharedLiving = sum(exp.living);
+  const debt = sharedDebt + sum(P.you.debts) + sum(P.wife.debts);
+  const living = sharedLiving + sum(P.you.living) + sum(P.wife.living);
   const disposable = net - housing - debt - living;
+
+  // Per-person split. Fed tax is allocated by each person's pre-tax income; Addl. Medicare by FICA wages.
+  const baseA = a.gross - a.k401 - a.health, baseB = b.gross - b.k401 - b.health;
+  const fShare = baseA + baseB > 0 ? baseA / (baseA + baseB) : 0.5;
+  const wShare = a.ficaWages + b.ficaWages > 0 ? a.ficaWages / (a.ficaWages + b.ficaWages) : 0.5;
+  const youPct = Math.min(100, num(exp.youShare)) / 100;
+  const sharedTotal = housing + sharedDebt + sharedLiving;
+  const person = (x, pe, fS, wS, pct) => {
+    const f = fed * fS, fi = x.ss + x.medicare + addl * wS;
+    const n = x.gross - x.k401 - x.health - f - fi;
+    const personal = sum(pe.debts) + sum(pe.living), shared = sharedTotal * pct;
+    return { gross: x.gross, k401: x.k401, health: x.health, fed: f, fica: fi, net: n, personal, shared, disposable: n - personal - shared };
+  };
   return { gross, tips, tipDed, k401, health, fed, fica, net, housing, debt, living, disposable,
-           monthly: disposable / 12, savingsRate: net > 0 ? disposable / net : 0 };
+           monthly: disposable / 12, savingsRate: net > 0 ? disposable / net : 0,
+           you: person(a, P.you, fShare, wShare, youPct), wife: person(b, P.wife, 1 - fShare, 1 - wShare, 1 - youPct) };
 }
 
 // ---------- State ----------
@@ -229,7 +264,9 @@ function defaults() {
   const c3 = c('Example: Tipped (server/dealer)', { owner: 'wife', mode: 'hourly', rate: 12, hours: 30, weeks: 50, k401: 0, health: 0, tipDay: 120, tipDays: 4, tipWeeks: 50 });
   return {
     careers: [c1, c2, c4, c3], you: c1.id, wife: c3.id,
-    housing: 1700,
+    housing: 1700, youShare: 50,
+    personal: { you: { debts: [], living: [{ id: nid(), name: 'Personal spending', amount: 150 }] },
+                wife: { debts: [], living: [{ id: nid(), name: 'Personal spending', amount: 150 }] } },
     debts: [{ id: nid(), name: 'Student loan', amount: 250 }, { id: nid(), name: 'Car', amount: 350 }],
     living: [{ id: nid(), name: 'Food', amount: 700 }, { id: nid(), name: 'Utilities & phone', amount: 300 },
              { id: nid(), name: 'Insurance', amount: 250 }, { id: nid(), name: 'Transport / gas', amount: 200 },
@@ -239,6 +276,9 @@ function defaults() {
 
 // Older saves had one shared career list: give each person their own copy.
 function migrate(s) {
+  s.personal = s.personal || {};
+  for (const o of ['you', 'wife']) { s.personal[o] = s.personal[o] || {}; s.personal[o].debts = s.personal[o].debts || []; s.personal[o].living = s.personal[o].living || []; }
+  if (s.youShare === undefined || s.youShare === '') s.youShare = 50;
   if (s.careers.every(c => c.owner)) return s;
   const out = [], map = { you: {}, wife: {} };
   for (const c of s.careers) for (const o of ['you', 'wife']) {
@@ -250,7 +290,7 @@ function migrate(s) {
 }
 let state;
 try { state = JSON.parse(localStorage.getItem(KEY)); } catch (e) {}
-state = state && Array.isArray(state.careers) ? migrate(state) : defaults();
+state = state && Array.isArray(state.careers) ? migrate(state) : migrate(defaults());
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} };
 
 // ---------- Helpers ----------
@@ -259,7 +299,8 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, ch => ({ '&':'&amp;','<':'&
 const usd = n => (n < 0 ? '-' : '') + '$' + Math.abs(Math.round(n)).toLocaleString('en-US');
 const careersFor = o => state.careers.filter(c => c.owner === o);
 const careerById = id => id === 'none' ? NONE : state.careers.find(c => c.id === id) || NONE;
-const exp = () => ({ housing: state.housing, debts: state.debts, living: state.living, tipDeduction: state.tipDeduction !== false });
+const getList = k => { const [a, b] = k.split('.'); return b ? state.personal[a][b] : state[a]; };
+const exp = () => ({ housing: state.housing, debts: state.debts, living: state.living, personal: state.personal, youShare: state.youShare, tipDeduction: state.tipDeduction !== false });
 
 // ---------- Input rendering (only rebuilt on structure changes, not on typing) ----------
 function numField(label, field, id, extra = '') {
@@ -292,15 +333,16 @@ function renderCareers() {
 }
 
 function listRows(kind) {
-  const arr = state[kind];
-  $(kind === 'debts' ? 'debts' : 'living').innerHTML = arr.map(r =>
+  const arr = getList(kind);
+  $(kind.replace('.', '-')).innerHTML = arr.map(r =>
     `<div class="line"><input data-l="${kind}" data-id="${r.id}" data-f="name" value="${esc(r.name)}" aria-label="Name">
      <input type="number" min="0" step="any" data-l="${kind}" data-id="${r.id}" data-f="amount" value="${esc(r.amount)}" aria-label="Monthly amount">
      <button class="icon" data-ldel="${kind}" data-id="${r.id}" aria-label="Remove">✕</button></div>`).join('');
 }
 
 function renderInputs() {
-  renderCareers(); listRows('debts'); listRows('living');
+  renderCareers(); ['debts', 'living', 'you.debts', 'you.living', 'wife.debts', 'wife.living'].forEach(listRows);
+  $('youShare').value = state.youShare; $('wifeShare').value = 100 - Math.min(100, num(state.youShare));
   $('housing').value = state.housing;
   $('tipDed').checked = state.tipDeduction !== false;
 }
@@ -355,6 +397,15 @@ function renderResults() {
   $('per').innerHTML = '<thead><tr><th></th><th>Bi-weekly</th><th>Monthly</th><th>Yearly</th></tr></thead><tbody>' +
     lines.map(([n, v, t]) => `<tr class="${t ? 'total' : ''}"><td>${n}</td><td class="${v < 0 && t ? 'neg' : ''}">${usd(v / 26)}</td><td class="${v < 0 && t ? 'neg' : ''}">${usd(v / 12)}</td><td class="${v < 0 && t ? 'neg' : ''}">${usd(v)}</td></tr>`).join('') + '</tbody>';
 
+  const per = state.period || 12, pName = { 26: 'bi-weekly', 12: 'monthly', 1: 'yearly' }[per];
+  document.querySelectorAll('[data-period]').forEach(b => b.setAttribute('aria-pressed', String(+b.dataset.period === per)));
+  const wl = [['Gross pay', x => x.gross], ['Federal tax (allocated)', x => -x.fed], ['FICA', x => -x.fica], ['401(k) + health', x => -(x.k401 + x.health)],
+    ['Take-home', x => x.net, 1], ['Share of shared expenses', x => -x.shared], ['Personal expenses', x => -x.personal], ['Disposable income', x => x.disposable, 1]];
+  const hh = { gross: r.gross, fed: r.fed, fica: r.fica, k401: r.k401, health: r.health, net: r.net, shared: r.housing + (r.debt + r.living - r.you.personal - r.wife.personal), personal: r.you.personal + r.wife.personal, disposable: r.disposable };
+  const cell = (v, t) => `<td class="${t && v < 0 ? 'neg' : ''}">${usd(v / per)}</td>`;
+  $('who').innerHTML = `<thead><tr><th>${pName}</th><th>You</th><th>Wife</th><th>Household</th></tr></thead><tbody>` +
+    wl.map(([n, f, t]) => `<tr class="${t ? 'total' : ''}"><td>${n}</td>${cell(f(r.you), t)}${cell(f(r.wife), t)}${cell(f(hh), t)}</tr>`).join('') + '</tbody>';
+
   let flag = '';
   if (r.gross === 0) flag = `<div class="flag">No income selected for this pairing.</div>`;
   else if (r.disposable < 0) flag = `<div class="flag bad">This scenario is <b>${usd(-r.monthly)}/month short</b>: expenses exceed take-home pay.</div>`;
@@ -393,6 +444,7 @@ document.addEventListener('input', e => {
   const t = e.target;
   if (t.id === 'tipDed') state.tipDeduction = t.checked;
   else if (t.id === 'housing') state.housing = t.value;
+  else if (t.id === 'youShare') { state.youShare = t.value; $('wifeShare').value = 100 - Math.min(100, num(t.value)); }
   else if (t.dataset.c) {
     const c = state.careers.find(x => x.id === t.dataset.c); if (!c) return;
     c[t.dataset.f] = t.value;
@@ -400,7 +452,7 @@ document.addEventListener('input', e => {
     const tp = document.querySelector(`[data-tips="${c.id}"]`); if (tp) tp.textContent = usd(annualTips(c));
     const tm = document.querySelector(`[data-tipsmo="${c.id}"]`); if (tm) tm.textContent = usd(annualTips(c) / 12);
   } else if (t.dataset.l) {
-    const row = state[t.dataset.l].find(x => x.id === t.dataset.id); if (row) row[t.dataset.f] = t.value;
+    const row = getList(t.dataset.l).find(x => x.id === t.dataset.id); if (row) row[t.dataset.f] = t.value;
   } else return;
   save(); renderResults();
 });
@@ -414,8 +466,10 @@ document.addEventListener('click', e => {
     state.careers = state.careers.filter(c => c.id !== t.dataset.del);
     save(); renderCareers(); renderResults();
   } else if (t.dataset.ldel) {
-    state[t.dataset.ldel] = state[t.dataset.ldel].filter(r => r.id !== t.dataset.id);
+    const arr = getList(t.dataset.ldel); const i = arr.findIndex(r => r.id === t.dataset.id); if (i >= 0) arr.splice(i, 1);
     save(); listRows(t.dataset.ldel); renderResults();
+  } else if (t.dataset.period) {
+    state.period = +t.dataset.period; save(); renderResults();
   } else if (t.dataset.pa) {
     state.you = t.dataset.pa; state.wife = t.dataset.pb; save(); renderResults();
   }
@@ -425,8 +479,9 @@ document.querySelectorAll('[data-add]').forEach(btn => btn.onclick = () => {
   state.careers.push({ id: nid(), owner: btn.dataset.add, name: 'New career', mode: 'salary', salary: 0, rate: 0, hours: 40, weeks: 52, bonus: 0, k401: 0, health: 0, housing: '', tipDay: 0, tipDays: 5, tipWeeks: 50 });
   save(); renderCareers(); renderResults();
 });
-$('addDebt').onclick = () => { state.debts.push({ id: nid(), name: 'Debt', amount: 0 }); save(); listRows('debts'); };
-$('addLiving').onclick = () => { state.living.push({ id: nid(), name: 'Cost', amount: 0 }); save(); listRows('living'); };
+document.querySelectorAll('[data-addl]').forEach(btn => btn.onclick = () => {
+  const k = btn.dataset.addl; getList(k).push({ id: nid(), name: k.endsWith('debts') ? 'Debt' : 'Cost', amount: 0 }); save(); listRows(k);
+});
 $('export').onclick = () => {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' }));
