@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Household Disposable Income Planner</title>
+<style>
+  :root {
+    --bg:#f6f7f9; --card:#fff; --ink:#1c2430; --muted:#5d6877; --line:#dfe3e8;
+    --accent:#2a6fdb; --good:#1f8a5b; --bad:#c0392b; --warn:#b7791f;
+    --c-fed:#8a6fd1; --c-fica:#d98a3d; --c-pre:#3aa0b5; --c-house:#6b7b93; --c-debt:#c75a6a; --c-live:#a3a86b; --c-disp:#1f8a5b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#12161c; --card:#1b212a; --ink:#e8ecf1; --muted:#9aa5b4; --line:#2c3541; --accent:#6aa3ff; --good:#4fc38a; --bad:#ff7a6b; --warn:#e0b04f; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--ink); }
+  header { padding:18px 20px 6px; max-width:1300px; margin:0 auto; }
+  header h1 { margin:0; font-size:22px; }
+  header p { margin:4px 0 0; color:var(--muted); font-size:13px; }
+  main { display:grid; grid-template-columns:minmax(320px,430px) 1fr; gap:16px; padding:12px 20px 40px; max-width:1300px; margin:0 auto; }
+  @media (max-width:900px){ main{ grid-template-columns:1fr; } }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px 16px; margin-bottom:14px; }
+  .card h2 { margin:0 0 10px; font-size:16px; }
+  .card h3 { margin:12px 0 6px; font-size:13px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
+  label { display:block; font-size:12px; color:var(--muted); margin-bottom:2px; }
+  input, select { width:100%; padding:7px 8px; border:1px solid var(--line); border-radius:6px; background:var(--bg); color:var(--ink); font:inherit; }
+  input:focus, select:focus, button:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
+  .row { display:grid; grid-template-columns:repeat(auto-fit,minmax(110px,1fr)); gap:8px; margin-bottom:8px; }
+  .career { border:1px solid var(--line); border-radius:8px; padding:10px; margin-bottom:10px; }
+  .career-head { display:flex; gap:8px; align-items:center; margin-bottom:8px; }
+  .career-head input { font-weight:600; }
+  button { font:inherit; cursor:pointer; border:1px solid var(--line); background:var(--bg); color:var(--ink); border-radius:6px; padding:6px 10px; }
+  button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+  button.icon { padding:4px 8px; color:var(--muted); }
+  .seg { display:inline-flex; border:1px solid var(--line); border-radius:6px; overflow:hidden; }
+  .seg button { border:0; border-radius:0; background:transparent; padding:5px 10px; font-size:13px; }
+  .seg button[aria-pressed="true"] { background:var(--accent); color:#fff; }
+  .hint { font-size:12px; color:var(--muted); margin:2px 0 6px; }
+  .hint b { color:var(--ink); }
+  .line { display:grid; grid-template-columns:1fr 110px auto; gap:6px; margin-bottom:6px; align-items:center; }
+  .cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; }
+  .stat { border:1px solid var(--line); border-radius:8px; padding:10px; }
+  .stat .k { font-size:12px; color:var(--muted); }
+  .stat .v { font-size:22px; font-weight:700; }
+  .neg { color:var(--bad); } .pos { color:var(--good); }
+  .flag { margin-top:10px; padding:8px 10px; border-radius:6px; font-size:13px; border-left:4px solid var(--warn); background:color-mix(in srgb,var(--warn) 12%,transparent); }
+  .flag.bad { border-color:var(--bad); background:color-mix(in srgb,var(--bad) 12%,transparent); }
+  .flag.ok { border-color:var(--good); background:color-mix(in srgb,var(--good) 12%,transparent); }
+  table.grid { border-collapse:separate; border-spacing:4px; width:100%; }
+  table.grid th { font-size:12px; font-weight:600; color:var(--muted); padding:4px; text-align:center; }
+  table.grid th.rh { text-align:right; }
+  table.grid td { padding:0; }
+  table.grid button.cell { width:100%; padding:12px 6px; border-radius:6px; font-weight:600; border:2px solid transparent; color:#10202b; }
+  table.grid button.cell[aria-pressed="true"] { border-color:var(--ink); }
+  .bar { display:flex; height:30px; border-radius:6px; overflow:hidden; background:var(--line); }
+  .bar span { height:100%; }
+  .legend { display:flex; flex-wrap:wrap; gap:6px 14px; margin-top:8px; font-size:12px; }
+  .legend i { display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:5px; vertical-align:-1px; }
+  .legend em { font-style:normal; color:var(--muted); }
+  .cmp { display:grid; grid-template-columns:minmax(120px,38%) 1fr 90px; gap:8px; align-items:center; margin-bottom:6px; font-size:13px; }
+  .cmp .track { height:16px; background:var(--line); border-radius:4px; position:relative; }
+  .cmp .fill { position:absolute; top:0; bottom:0; border-radius:4px; }
+  .cmp.sel .lbl { font-weight:700; }
+  .cmp .val { text-align:right; font-variant-numeric:tabular-nums; }
+  .disclaimer { font-size:12px; color:var(--muted); }
+  .tools { display:flex; gap:8px; flex-wrap:wrap; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Household Disposable Income Planner</h1>
+  <p>Compare career combinations for you and your wife. Nevada (no state income tax), married filing jointly, estimates only. Data stays in this browser.</p>
+</header>
+
+<main>
+  <section id="inputs">
+    <div class="card">
+      <h2>Careers</h2>
+      <div id="careers"></div>
+      <button class="primary" id="addCareer">+ Add career</button>
+    </div>
+    <div class="card">
+      <h2>Monthly expenses (shared)</h2>
+      <label for="housing">Rent / mortgage</label>
+      <input id="housing" type="number" min="0" step="50">
+      <p class="hint">If a career has a housing override (e.g. different city), your career's override is used first, then your wife's.</p>
+      <h3>Debt payments</h3>
+      <div id="debts"></div>
+      <button id="addDebt">+ Add debt</button>
+      <h3>Living costs</h3>
+      <div id="living"></div>
+      <button id="addLiving">+ Add cost</button>
+      <p class="hint">Reality check: most people underestimate living costs. Use your last 3 months of bank/card statements.</p>
+    </div>
+    <div class="card">
+      <h2>Backup</h2>
+      <div class="tools">
+        <button id="export">Export JSON</button>
+        <button id="import">Import JSON</button>
+        <button id="reset">Reset to examples</button>
+      </div>
+      <input id="file" type="file" accept="application/json" hidden>
+    </div>
+  </section>
+
+  <section id="results">
+    <div class="card">
+      <h2>Pairings: monthly disposable income</h2>
+      <p class="hint">Rows are <b>your</b> career, columns are <b>your wife's</b>. Click a cell to inspect it.</p>
+      <div id="grid" style="overflow-x:auto"></div>
+    </div>
+    <div class="card">
+      <h2 id="selTitle">Selected scenario</h2>
+      <div class="cards" id="stats"></div>
+      <div id="flag"></div>
+      <h3>Where the year's gross pay goes</h3>
+      <div class="bar" id="bar" role="img" aria-label="Breakdown of gross income"></div>
+      <div class="legend" id="legend"></div>
+    </div>
+    <div class="card">
+      <h2>All pairings, ranked</h2>
+      <div id="cmp"></div>
+    </div>
+    <p class="disclaimer">Estimates, not tax advice. Uses 2026 federal brackets (MFJ), standard deduction, FICA. Ignores tax credits, itemized deductions, employer match, and self-employment tax. Update the <code>TAX</code> constants in this file each year.</p>
+  </section>
+</main>
+
+<script>
+// ---------- Tax constants (2026, married filing jointly). Update yearly. ----------
+const TAX = {
+  year: 2026,
+  stdDeduction: 32200,
+  brackets: [ // [upper bound of bracket, rate]
+    [24800, .10], [100800, .12], [211400, .22], [403550, .24],
+    [512450, .32], [768700, .35], [Infinity, .37]
+  ],
+  ssRate: .062, ssWageBase: 184500,
+  medicareRate: .0145, addlMedicareRate: .009, addlMedicareThresholdMFJ: 250000
+};
+
+// ---------- Pure calculation ----------
+function num(x) { const n = parseFloat(x); return isFinite(n) && n > 0 ? n : 0; }
+
+function annualGross(c) {
+  if (!c) return 0;
+  const base = c.mode === 'hourly' ? num(c.rate) * num(c.hours) * num(c.weeks) : num(c.salary);
+  return base + num(c.bonus);
+}
+
+function personCalc(c) {
+  const gross = annualGross(c);
+  const k401 = c ? Math.min(gross, gross * num(c.k401) / 100) : 0;
+  const health = c ? Math.min(gross, num(c.health) * 12) : 0;
+  const ficaWages = gross - health; // 401(k) deferrals are still FICA wages; Section 125 health is not
+  const ss = Math.min(ficaWages, TAX.ssWageBase) * TAX.ssRate;
+  const medicare = ficaWages * TAX.medicareRate;
+  return { gross, k401, health, ficaWages, ss, medicare };
+}
+
+function federalTax(taxable) {
+  let tax = 0, lower = 0;
+  for (const [upper, rate] of TAX.brackets) {
+    if (taxable > lower) tax += (Math.min(taxable, upper) - lower) * rate;
+    lower = upper;
+  }
+  return tax;
+}
+
+function calc(careerA, careerB, exp) {
+  const a = personCalc(careerA), b = personCalc(careerB);
+  const gross = a.gross + b.gross;
+  const k401 = a.k401 + b.k401, health = a.health + b.health;
+  const taxable = Math.max(0, gross - k401 - health - TAX.stdDeduction);
+  const fed = federalTax(taxable);
+  const addl = Math.max(0, a.ficaWages + b.ficaWages - TAX.addlMedicareThresholdMFJ) * TAX.addlMedicareRate;
+  const fica = a.ss + b.ss + a.medicare + b.medicare + addl;
+  const net = gross - k401 - health - fed - fica; // annual take-home
+  const ov = (careerA && num(careerA.housing)) || (careerB && num(careerB.housing)) || 0;
+  const housing = (ov || num(exp.housing)) * 12;
+  const debt = exp.debts.reduce((s, d) => s + num(d.amount), 0) * 12;
+  const living = exp.living.reduce((s, d) => s + num(d.amount), 0) * 12;
+  const disposable = net - housing - debt - living;
+  return { gross, k401, health, fed, fica, net, housing, debt, living, disposable,
+           monthly: disposable / 12, savingsRate: net > 0 ? disposable / net : 0 };
+}
+
+// ---------- State ----------
+const KEY = 'disposableIncomePlanner.v1';
+let uid = 0; const nid = () => 'i' + (++uid) + Math.random().toString(36).slice(2, 6);
+const NONE = { id: 'none', name: 'No income / student', mode: 'salary', salary: 0 };
+
+function defaults() {
+  const c = (name, o) => Object.assign({ id: nid(), name, mode: 'salary', salary: 0, rate: 0, hours: 40, weeks: 52,
+    bonus: 0, k401: 5, health: 150, housing: '' }, o);
+  const c1 = c('Example: Tech job', { salary: 85000 });
+  const c2 = c('Example: Hourly trade', { mode: 'hourly', rate: 32, hours: 40, weeks: 50, health: 100 });
+  const c3 = c('Example: Part-time', { mode: 'hourly', rate: 20, hours: 25, weeks: 52, k401: 0, health: 0 });
+  return {
+    careers: [c1, c2, c3], you: c1.id, wife: c3.id,
+    housing: 1700,
+    debts: [{ id: nid(), name: 'Student loan', amount: 250 }, { id: nid(), name: 'Car', amount: 350 }],
+    living: [{ id: nid(), name: 'Food', amount: 700 }, { id: nid(), name: 'Utilities & phone', amount: 300 },
+             { id: nid(), name: 'Insurance', amount: 250 }, { id: nid(), name: 'Transport / gas', amount: 200 },
+             { id: nid(), name: 'Misc', amount: 300 }]
+  };
+}
+
+let state;
+try { state = JSON.parse(localStorage.getItem(KEY)); } catch (e) {}
+if (!state || !Array.isArray(state.careers)) state = defaults();
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} };
+
+// ---------- Helpers ----------
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, ch => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[ch]));
+const usd = n => (n < 0 ? '-' : '') + '$' + Math.abs(Math.round(n)).toLocaleString('en-US');
+const careerById = id => id === 'none' ? NONE : state.careers.find(c => c.id === id) || NONE;
+const exp = () => ({ housing: state.housing, debts: state.debts, living: state.living });
+
+// ---------- Input rendering (only rebuilt on structure changes, not on typing) ----------
+function numField(label, field, id, extra = '') {
+  return `<div><label>${label}</label><input type="number" min="0" step="any" data-c="${id}" data-f="${field}" value="${esc(state.careers.find(c => c.id === id)[field])}" ${extra}></div>`;
+}
+
+function renderCareers() {
+  $('careers').innerHTML = state.careers.map(c => {
+    const pay = c.mode === 'hourly'
+      ? `<div class="row">${numField('Hourly rate ($)', 'rate', c.id)}${numField('Hours / week', 'hours', c.id)}${numField('Weeks / year', 'weeks', c.id)}</div>`
+      : `<div class="row">${numField('Annual salary ($)', 'salary', c.id)}</div>`;
+    return `<div class="career" data-id="${c.id}">
+      <div class="career-head">
+        <input data-c="${c.id}" data-f="name" value="${esc(c.name)}" aria-label="Career name">
+        <button class="icon" data-del="${c.id}" title="Remove career" aria-label="Remove career">✕</button>
+      </div>
+      <div class="seg" role="group" aria-label="Pay type">
+        <button data-mode="salary" data-c="${c.id}" aria-pressed="${c.mode !== 'hourly'}">Salary</button>
+        <button data-mode="hourly" data-c="${c.id}" aria-pressed="${c.mode === 'hourly'}">Hourly</button>
+      </div>
+      <div style="height:8px"></div>
+      ${pay}
+      <div class="hint">Annual gross incl. bonus: <b data-gross="${c.id}">${usd(annualGross(c))}</b></div>
+      <div class="row">${numField('Bonus / yr ($)', 'bonus', c.id)}${numField('401(k) %', 'k401', c.id)}${numField('Health premium / mo ($)', 'health', c.id)}</div>
+      <div class="row">${numField('Housing override / mo ($, optional)', 'housing', c.id)}</div>
+    </div>`;
+  }).join('');
+}
+
+function listRows(kind) {
+  const arr = state[kind];
+  $(kind === 'debts' ? 'debts' : 'living').innerHTML = arr.map(r =>
+    `<div class="line"><input data-l="${kind}" data-id="${r.id}" data-f="name" value="${esc(r.name)}" aria-label="Name">
+     <input type="number" min="0" step="any" data-l="${kind}" data-id="${r.id}" data-f="amount" value="${esc(r.amount)}" aria-label="Monthly amount">
+     <button class="icon" data-ldel="${kind}" data-id="${r.id}" aria-label="Remove">✕</button></div>`).join('');
+}
+
+function renderInputs() {
+  renderCareers(); listRows('debts'); listRows('living');
+  $('housing').value = state.housing;
+}
+
+// ---------- Results rendering ----------
+function colorFor(v, max) {
+  if (v < 0) { const t = Math.min(1, -v / (max || 1)); return `hsl(5 ${55 + 25 * t}% ${88 - 18 * t}%)`; }
+  const t = Math.min(1, v / (max || 1)); return `hsl(150 ${35 + 25 * t}% ${90 - 32 * t}%)`;
+}
+
+function allPairs() {
+  const list = [{ id: 'none', name: NONE.name }, ...state.careers];
+  const rows = [{ id: 'none', name: NONE.name }, ...state.careers];
+  const pairs = [];
+  for (const a of rows) for (const b of list) pairs.push({ a: a.id, b: b.id, r: calc(careerById(a.id), careerById(b.id), exp()) });
+  return pairs;
+}
+
+function renderResults() {
+  const opts = [NONE, ...state.careers];
+  const pairs = allPairs();
+  const maxAbs = Math.max(1, ...pairs.map(p => Math.abs(p.r.monthly)));
+
+  // grid
+  const head = opts.map(o => `<th scope="col">${esc(o.name)}</th>`).join('');
+  const body = opts.map(a => `<tr><th scope="row" class="rh">${esc(a.name)}</th>` + opts.map(b => {
+    const r = pairs.find(p => p.a === a.id && p.b === b.id).r;
+    const sel = state.you === a.id && state.wife === b.id;
+    return `<td><button class="cell" data-pa="${a.id}" data-pb="${b.id}" aria-pressed="${sel}" style="background:${colorFor(r.monthly, maxAbs)}">${usd(r.monthly)}</button></td>`;
+  }).join('') + '</tr>').join('');
+  $('grid').innerHTML = `<table class="grid"><thead><tr><th class="rh">You ↓ / Wife →</th>${head}</tr></thead><tbody>${body}</tbody></table>`;
+
+  // selected scenario
+  if (!opts.some(o => o.id === state.you)) state.you = 'none';
+  if (!opts.some(o => o.id === state.wife)) state.wife = 'none';
+  const A = careerById(state.you), B = careerById(state.wife);
+  const r = calc(A, B, exp());
+  $('selTitle').textContent = `You: ${A.name}  +  Wife: ${B.name}`;
+  const cls = v => v < 0 ? 'neg' : 'pos';
+  $('stats').innerHTML = [
+    ['Disposable / month', `<span class="${cls(r.monthly)}">${usd(r.monthly)}</span>`],
+    ['Disposable / year', `<span class="${cls(r.disposable)}">${usd(r.disposable)}</span>`],
+    ['Take-home / month', usd(r.net / 12)],
+    ['Left of take-home', `${(r.savingsRate * 100).toFixed(0)}%`],
+    ['Gross / year', usd(r.gross)]
+  ].map(([k, v]) => `<div class="stat"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('');
+
+  let flag = '';
+  if (r.gross === 0) flag = `<div class="flag">No income selected for this pairing.</div>`;
+  else if (r.disposable < 0) flag = `<div class="flag bad">This scenario is <b>${usd(-r.monthly)}/month short</b>: expenses exceed take-home pay.</div>`;
+  else if (r.savingsRate < 0.1) flag = `<div class="flag">Thin margin: under 10% of take-home is left. One surprise bill could cause trouble.</div>`;
+  else flag = `<div class="flag ok">Healthy margin. Remember 401(k) contributions (${usd(r.k401 / 12)}/mo) are saved on top of this.</div>`;
+  $('flag').innerHTML = flag;
+
+  // breakdown bar
+  const parts = [
+    ['Federal tax', r.fed, 'var(--c-fed)'], ['FICA (SS + Medicare)', r.fica, 'var(--c-fica)'],
+    ['401(k) + health', r.k401 + r.health, 'var(--c-pre)'], ['Housing', r.housing, 'var(--c-house)'],
+    ['Debt', r.debt, 'var(--c-debt)'], ['Living', r.living, 'var(--c-live)'],
+    ['Disposable', Math.max(0, r.disposable), 'var(--c-disp)']
+  ];
+  const total = parts.reduce((s, p) => s + p[1], 0) || 1;
+  $('bar').innerHTML = parts.map(([n, v, c]) => `<span style="width:${v / total * 100}%;background:${c}" title="${n}: ${usd(v)}"></span>`).join('');
+  $('legend').innerHTML = parts.map(([n, v, c]) => `<span><i style="background:${c}"></i>${n} <em>${usd(v / 12)}/mo</em></span>`).join('');
+  if (r.disposable < 0) $('legend').innerHTML += `<span class="neg"><b>Shortfall ${usd(-r.disposable / 12)}/mo (not shown in bar)</b></span>`;
+
+  // ranked comparison
+  const ranked = pairs.filter(p => p.r.gross > 0).sort((x, y) => y.r.monthly - x.r.monthly);
+  const lo = Math.min(0, ...ranked.map(p => p.r.monthly)), hi = Math.max(1, ...ranked.map(p => p.r.monthly));
+  const span = hi - lo, zero = (0 - lo) / span * 100;
+  $('cmp').innerHTML = ranked.map(p => {
+    const v = p.r.monthly, w = Math.abs(v) / span * 100;
+    const left = v >= 0 ? zero : zero - w;
+    const sel = p.a === state.you && p.b === state.wife;
+    return `<div class="cmp ${sel ? 'sel' : ''}"><div class="lbl">${esc(careerById(p.a).name)} + ${esc(careerById(p.b).name)}</div>
+      <div class="track"><div class="fill" style="left:${left}%;width:${w}%;background:${v >= 0 ? 'var(--good)' : 'var(--bad)'}"></div></div>
+      <div class="val ${v < 0 ? 'neg' : ''}">${usd(v)}/mo</div></div>`;
+  }).join('') || '<p class="hint">Enter pay for at least one career.</p>';
+}
+
+// ---------- Events ----------
+document.addEventListener('input', e => {
+  const t = e.target;
+  if (t.id === 'housing') state.housing = t.value;
+  else if (t.dataset.c) {
+    const c = state.careers.find(x => x.id === t.dataset.c); if (!c) return;
+    c[t.dataset.f] = t.value;
+    const g = document.querySelector(`[data-gross="${c.id}"]`); if (g) g.textContent = usd(annualGross(c));
+  } else if (t.dataset.l) {
+    const row = state[t.dataset.l].find(x => x.id === t.dataset.id); if (row) row[t.dataset.f] = t.value;
+  } else return;
+  save(); renderResults();
+});
+
+document.addEventListener('click', e => {
+  const t = e.target.closest('button'); if (!t) return;
+  if (t.dataset.mode) {
+    state.careers.find(c => c.id === t.dataset.c).mode = t.dataset.mode;
+    save(); renderCareers(); renderResults();
+  } else if (t.dataset.del) {
+    state.careers = state.careers.filter(c => c.id !== t.dataset.del);
+    save(); renderCareers(); renderResults();
+  } else if (t.dataset.ldel) {
+    state[t.dataset.ldel] = state[t.dataset.ldel].filter(r => r.id !== t.dataset.id);
+    save(); listRows(t.dataset.ldel); renderResults();
+  } else if (t.dataset.pa) {
+    state.you = t.dataset.pa; state.wife = t.dataset.pb; save(); renderResults();
+  }
+});
+
+$('addCareer').onclick = () => {
+  state.careers.push({ id: nid(), name: 'New career', mode: 'salary', salary: 0, rate: 0, hours: 40, weeks: 52, bonus: 0, k401: 0, health: 0, housing: '' });
+  save(); renderCareers(); renderResults();
+};
+$('addDebt').onclick = () => { state.debts.push({ id: nid(), name: 'Debt', amount: 0 }); save(); listRows('debts'); };
+$('addLiving').onclick = () => { state.living.push({ id: nid(), name: 'Cost', amount: 0 }); save(); listRows('living'); };
+$('export').onclick = () => {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' }));
+  a.download = 'disposable-income-plan.json'; a.click(); URL.revokeObjectURL(a.href);
+};
+$('import').onclick = () => $('file').click();
+$('file').onchange = e => {
+  const f = e.target.files[0]; if (!f) return;
+  const rd = new FileReader();
+  rd.onload = () => {
+    try {
+      const s = JSON.parse(rd.result);
+      if (!Array.isArray(s.careers) || !Array.isArray(s.debts) || !Array.isArray(s.living)) throw 0;
+      state = s; save(); renderInputs(); renderResults();
+    } catch (err) { alert('That file is not a valid plan.'); }
+  };
+  rd.readAsText(f); e.target.value = '';
+};
+$('reset').onclick = () => { if (confirm('Replace everything with the example data?')) { state = defaults(); save(); renderInputs(); renderResults(); } };
+
+renderInputs(); renderResults();
+</script>
+</body>
+</html>
