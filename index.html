@@ -81,9 +81,14 @@
 <main>
   <section id="inputs">
     <div class="card">
-      <h2>Careers</h2>
-      <div id="careers"></div>
-      <button class="primary" id="addCareer">+ Add career</button>
+      <h2>Your careers</h2>
+      <div id="careers-you"></div>
+      <button class="primary" data-add="you">+ Add career for you</button>
+    </div>
+    <div class="card">
+      <h2>Your wife's careers</h2>
+      <div id="careers-wife"></div>
+      <button class="primary" data-add="wife">+ Add career for her</button>
     </div>
     <div class="card">
       <h2>Monthly expenses (shared)</h2>
@@ -218,11 +223,12 @@ const NONE = { id: 'none', name: 'No income / student', mode: 'salary', salary: 
 function defaults() {
   const c = (name, o) => Object.assign({ id: nid(), name, mode: 'salary', salary: 0, rate: 0, hours: 40, weeks: 52,
     bonus: 0, k401: 5, health: 150, housing: '', tipDay: 0, tipDays: 5, tipWeeks: 50 }, o);
-  const c1 = c('Example: Tech job', { salary: 85000 });
-  const c2 = c('Example: Hourly trade', { mode: 'hourly', rate: 32, hours: 40, weeks: 50, health: 100 });
-  const c3 = c('Example: Tipped (server/dealer)', { mode: 'hourly', rate: 12, hours: 30, weeks: 50, k401: 0, health: 0, tipDay: 120, tipDays: 4, tipWeeks: 50 });
+  const c1 = c('Example: Tech job', { owner: 'you', salary: 85000 });
+  const c2 = c('Example: Hourly trade', { owner: 'you', mode: 'hourly', rate: 32, hours: 40, weeks: 50, health: 100 });
+  const c4 = c('Example: Office job', { owner: 'wife', salary: 50000, k401: 3, health: 100 });
+  const c3 = c('Example: Tipped (server/dealer)', { owner: 'wife', mode: 'hourly', rate: 12, hours: 30, weeks: 50, k401: 0, health: 0, tipDay: 120, tipDays: 4, tipWeeks: 50 });
   return {
-    careers: [c1, c2, c3], you: c1.id, wife: c3.id,
+    careers: [c1, c2, c4, c3], you: c1.id, wife: c3.id,
     housing: 1700,
     debts: [{ id: nid(), name: 'Student loan', amount: 250 }, { id: nid(), name: 'Car', amount: 350 }],
     living: [{ id: nid(), name: 'Food', amount: 700 }, { id: nid(), name: 'Utilities & phone', amount: 300 },
@@ -231,15 +237,27 @@ function defaults() {
   };
 }
 
+// Older saves had one shared career list: give each person their own copy.
+function migrate(s) {
+  if (s.careers.every(c => c.owner)) return s;
+  const out = [], map = { you: {}, wife: {} };
+  for (const c of s.careers) for (const o of ['you', 'wife']) {
+    if (c.owner) { if (c.owner === o) out.push(c); continue; }
+    const copy = Object.assign({}, c, { id: nid(), owner: o }); out.push(copy); map[o][c.id] = copy.id;
+  }
+  s.careers = out; s.you = map.you[s.you] || s.you; s.wife = map.wife[s.wife] || s.wife;
+  return s;
+}
 let state;
 try { state = JSON.parse(localStorage.getItem(KEY)); } catch (e) {}
-if (!state || !Array.isArray(state.careers)) state = defaults();
+state = state && Array.isArray(state.careers) ? migrate(state) : defaults();
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} };
 
 // ---------- Helpers ----------
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, ch => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[ch]));
 const usd = n => (n < 0 ? '-' : '') + '$' + Math.abs(Math.round(n)).toLocaleString('en-US');
+const careersFor = o => state.careers.filter(c => c.owner === o);
 const careerById = id => id === 'none' ? NONE : state.careers.find(c => c.id === id) || NONE;
 const exp = () => ({ housing: state.housing, debts: state.debts, living: state.living, tipDeduction: state.tipDeduction !== false });
 
@@ -249,7 +267,7 @@ function numField(label, field, id, extra = '') {
 }
 
 function renderCareers() {
-  $('careers').innerHTML = state.careers.map(c => {
+  for (const o of ['you', 'wife']) $('careers-' + o).innerHTML = careersFor(o).map(c => {
     const pay = c.mode === 'hourly'
       ? `<div class="row">${numField('Hourly rate ($)', 'rate', c.id)}${numField('Hours / week', 'hours', c.id)}${numField('Weeks / year', 'weeks', c.id)}</div>`
       : `<div class="row">${numField('Annual salary ($)', 'salary', c.id)}</div>`;
@@ -294,21 +312,21 @@ function colorFor(v, max) {
 }
 
 function allPairs() {
-  const list = [{ id: 'none', name: NONE.name }, ...state.careers];
-  const rows = [{ id: 'none', name: NONE.name }, ...state.careers];
+  const list = [NONE, ...careersFor('wife')];
+  const rows = [NONE, ...careersFor('you')];
   const pairs = [];
   for (const a of rows) for (const b of list) pairs.push({ a: a.id, b: b.id, r: calc(careerById(a.id), careerById(b.id), exp()) });
   return pairs;
 }
 
 function renderResults() {
-  const opts = [NONE, ...state.careers];
+  const rowOpts = [NONE, ...careersFor('you')], colOpts = [NONE, ...careersFor('wife')];
   const pairs = allPairs();
   const maxAbs = Math.max(1, ...pairs.map(p => Math.abs(p.r.monthly)));
 
   // grid
-  const head = opts.map(o => `<th scope="col">${esc(o.name)}</th>`).join('');
-  const body = opts.map(a => `<tr><th scope="row" class="rh">${esc(a.name)}</th>` + opts.map(b => {
+  const head = colOpts.map(o => `<th scope="col">${esc(o.name)}</th>`).join('');
+  const body = rowOpts.map(a => `<tr><th scope="row" class="rh">${esc(a.name)}</th>` + colOpts.map(b => {
     const r = pairs.find(p => p.a === a.id && p.b === b.id).r;
     const sel = state.you === a.id && state.wife === b.id;
     return `<td><button class="cell" data-pa="${a.id}" data-pb="${b.id}" aria-pressed="${sel}" style="background:${colorFor(r.monthly, maxAbs)}">${usd(r.monthly)}</button></td>`;
@@ -316,8 +334,8 @@ function renderResults() {
   $('grid').innerHTML = `<table class="grid"><thead><tr><th class="rh">You ↓ / Wife →</th>${head}</tr></thead><tbody>${body}</tbody></table>`;
 
   // selected scenario
-  if (!opts.some(o => o.id === state.you)) state.you = 'none';
-  if (!opts.some(o => o.id === state.wife)) state.wife = 'none';
+  if (!rowOpts.some(o => o.id === state.you)) state.you = 'none';
+  if (!colOpts.some(o => o.id === state.wife)) state.wife = 'none';
   const A = careerById(state.you), B = careerById(state.wife);
   const r = calc(A, B, exp());
   $('selTitle').textContent = `You: ${A.name}  +  Wife: ${B.name}`;
@@ -403,10 +421,10 @@ document.addEventListener('click', e => {
   }
 });
 
-$('addCareer').onclick = () => {
-  state.careers.push({ id: nid(), name: 'New career', mode: 'salary', salary: 0, rate: 0, hours: 40, weeks: 52, bonus: 0, k401: 0, health: 0, housing: '', tipDay: 0, tipDays: 5, tipWeeks: 50 });
+document.querySelectorAll('[data-add]').forEach(btn => btn.onclick = () => {
+  state.careers.push({ id: nid(), owner: btn.dataset.add, name: 'New career', mode: 'salary', salary: 0, rate: 0, hours: 40, weeks: 52, bonus: 0, k401: 0, health: 0, housing: '', tipDay: 0, tipDays: 5, tipWeeks: 50 });
   save(); renderCareers(); renderResults();
-};
+});
 $('addDebt').onclick = () => { state.debts.push({ id: nid(), name: 'Debt', amount: 0 }); save(); listRows('debts'); };
 $('addLiving').onclick = () => { state.living.push({ id: nid(), name: 'Cost', amount: 0 }); save(); listRows('living'); };
 $('export').onclick = () => {
@@ -422,7 +440,7 @@ $('file').onchange = e => {
     try {
       const s = JSON.parse(rd.result);
       if (!Array.isArray(s.careers) || !Array.isArray(s.debts) || !Array.isArray(s.living)) throw 0;
-      state = s; save(); renderInputs(); renderResults();
+      state = migrate(s); save(); renderInputs(); renderResults();
     } catch (err) { alert('That file is not a valid plan.'); }
   };
   rd.readAsText(f); e.target.value = '';
