@@ -99,6 +99,13 @@
       <p class="hint">Reality check: most people underestimate living costs. Use your last 3 months of bank/card statements.</p>
     </div>
     <div class="card">
+      <h2>Tips tax treatment</h2>
+      <label style="display:flex;gap:8px;align-items:flex-start;color:var(--ink);font-size:14px">
+        <input type="checkbox" id="tipDed" style="width:auto;margin-top:3px">
+        <span>Apply federal "no tax on tips" deduction (up to $25,000, 2025&ndash;2028, phases out above $300k income for joint filers)</span></label>
+      <p class="hint">Only applies to qualifying tipped jobs (e.g. servers, bartenders, casino dealers), and only to income tax, not Social Security/Medicare. Tips must be reported. Turn off if unsure and confirm with a tax pro or the IRS guidance.</p>
+    </div>
+    <div class="card">
       <h2>Backup</h2>
       <div class="tools">
         <button id="export">Export JSON</button>
@@ -144,26 +151,30 @@ const TAX = {
     [512450, .32], [768700, .35], [Infinity, .37]
   ],
   ssRate: .062, ssWageBase: 184500,
+  // 'No tax on tips' federal income-tax deduction (2025-2028). Does NOT reduce FICA.
+  tipDeductionMax: 25000, tipPhaseoutStartMFJ: 300000, tipPhaseoutPer1000: 100,
   medicareRate: .0145, addlMedicareRate: .009, addlMedicareThresholdMFJ: 250000
 };
 
 // ---------- Pure calculation ----------
 function num(x) { const n = parseFloat(x); return isFinite(n) && n > 0 ? n : 0; }
 
+function annualTips(c) { return c ? num(c.tipDay) * num(c.tipDays) * num(c.tipWeeks) : 0; }
+
 function annualGross(c) {
   if (!c) return 0;
   const base = c.mode === 'hourly' ? num(c.rate) * num(c.hours) * num(c.weeks) : num(c.salary);
-  return base + num(c.bonus);
+  return base + num(c.bonus) + annualTips(c);
 }
 
 function personCalc(c) {
-  const gross = annualGross(c);
-  const k401 = c ? Math.min(gross, gross * num(c.k401) / 100) : 0;
+  const gross = annualGross(c), tips = annualTips(c);
+  const k401 = c ? (gross - tips) * Math.min(100, num(c.k401)) / 100 : 0; // 401(k) assumed on wages, not tips
   const health = c ? Math.min(gross, num(c.health) * 12) : 0;
   const ficaWages = gross - health; // 401(k) deferrals are still FICA wages; Section 125 health is not
   const ss = Math.min(ficaWages, TAX.ssWageBase) * TAX.ssRate;
   const medicare = ficaWages * TAX.medicareRate;
-  return { gross, k401, health, ficaWages, ss, medicare };
+  return { gross, tips, k401, health, ficaWages, ss, medicare };
 }
 
 function federalTax(taxable) {
@@ -179,7 +190,13 @@ function calc(careerA, careerB, exp) {
   const a = personCalc(careerA), b = personCalc(careerB);
   const gross = a.gross + b.gross;
   const k401 = a.k401 + b.k401, health = a.health + b.health;
-  const taxable = Math.max(0, gross - k401 - health - TAX.stdDeduction);
+  const tips = a.tips + b.tips;
+  let tipDed = 0;
+  if (exp.tipDeduction && tips > 0) {
+    const over = Math.max(0, gross - TAX.tipPhaseoutStartMFJ);
+    tipDed = Math.max(0, Math.min(tips, TAX.tipDeductionMax) - Math.ceil(over / 1000) * TAX.tipPhaseoutPer1000);
+  }
+  const taxable = Math.max(0, gross - k401 - health - TAX.stdDeduction - tipDed);
   const fed = federalTax(taxable);
   const addl = Math.max(0, a.ficaWages + b.ficaWages - TAX.addlMedicareThresholdMFJ) * TAX.addlMedicareRate;
   const fica = a.ss + b.ss + a.medicare + b.medicare + addl;
@@ -189,7 +206,7 @@ function calc(careerA, careerB, exp) {
   const debt = exp.debts.reduce((s, d) => s + num(d.amount), 0) * 12;
   const living = exp.living.reduce((s, d) => s + num(d.amount), 0) * 12;
   const disposable = net - housing - debt - living;
-  return { gross, k401, health, fed, fica, net, housing, debt, living, disposable,
+  return { gross, tips, tipDed, k401, health, fed, fica, net, housing, debt, living, disposable,
            monthly: disposable / 12, savingsRate: net > 0 ? disposable / net : 0 };
 }
 
@@ -200,10 +217,10 @@ const NONE = { id: 'none', name: 'No income / student', mode: 'salary', salary: 
 
 function defaults() {
   const c = (name, o) => Object.assign({ id: nid(), name, mode: 'salary', salary: 0, rate: 0, hours: 40, weeks: 52,
-    bonus: 0, k401: 5, health: 150, housing: '' }, o);
+    bonus: 0, k401: 5, health: 150, housing: '', tipDay: 0, tipDays: 5, tipWeeks: 50 }, o);
   const c1 = c('Example: Tech job', { salary: 85000 });
   const c2 = c('Example: Hourly trade', { mode: 'hourly', rate: 32, hours: 40, weeks: 50, health: 100 });
-  const c3 = c('Example: Part-time', { mode: 'hourly', rate: 20, hours: 25, weeks: 52, k401: 0, health: 0 });
+  const c3 = c('Example: Tipped (server/dealer)', { mode: 'hourly', rate: 12, hours: 30, weeks: 50, k401: 0, health: 0, tipDay: 120, tipDays: 4, tipWeeks: 50 });
   return {
     careers: [c1, c2, c3], you: c1.id, wife: c3.id,
     housing: 1700,
@@ -224,7 +241,7 @@ const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, ch => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[ch]));
 const usd = n => (n < 0 ? '-' : '') + '$' + Math.abs(Math.round(n)).toLocaleString('en-US');
 const careerById = id => id === 'none' ? NONE : state.careers.find(c => c.id === id) || NONE;
-const exp = () => ({ housing: state.housing, debts: state.debts, living: state.living });
+const exp = () => ({ housing: state.housing, debts: state.debts, living: state.living, tipDeduction: state.tipDeduction !== false });
 
 // ---------- Input rendering (only rebuilt on structure changes, not on typing) ----------
 function numField(label, field, id, extra = '') {
@@ -247,7 +264,9 @@ function renderCareers() {
       </div>
       <div style="height:8px"></div>
       ${pay}
-      <div class="hint">Annual gross incl. bonus: <b data-gross="${c.id}">${usd(annualGross(c))}</b></div>
+      <div class="row">${numField('Est. tips / shift ($)', 'tipDay', c.id)}${numField('Tipped shifts / week', 'tipDays', c.id)}${numField('Weeks / year', 'tipWeeks', c.id)}</div>
+      <div class="hint">Estimated tips: <b data-tips="${c.id}">${usd(annualTips(c))}</b>/yr (about <b data-tipsmo="${c.id}">${usd(annualTips(c) / 12)}</b>/mo)</div>
+      <div class="hint">Annual gross incl. bonus &amp; tips: <b data-gross="${c.id}">${usd(annualGross(c))}</b></div>
       <div class="row">${numField('Bonus / yr ($)', 'bonus', c.id)}${numField('401(k) %', 'k401', c.id)}${numField('Health premium / mo ($)', 'health', c.id)}</div>
       <div class="row">${numField('Housing override / mo ($, optional)', 'housing', c.id)}</div>
     </div>`;
@@ -265,6 +284,7 @@ function listRows(kind) {
 function renderInputs() {
   renderCareers(); listRows('debts'); listRows('living');
   $('housing').value = state.housing;
+  $('tipDed').checked = state.tipDeduction !== false;
 }
 
 // ---------- Results rendering ----------
@@ -312,7 +332,7 @@ function renderResults() {
     ['Gross / year', usd(r.gross)]
   ].map(([k, v]) => `<div class="stat"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('');
 
-  const lines = [['Gross pay', r.gross], ['Federal tax', -r.fed], ['FICA', -r.fica], ['401(k) + health', -(r.k401 + r.health)],
+  const lines = [['Gross pay', r.gross], ...(r.tips ? [['&nbsp;&nbsp;of which tips', r.tips]] : []), ['Federal tax', -r.fed], ['FICA', -r.fica], ['401(k) + health', -(r.k401 + r.health)],
     ['Take-home', r.net, 1], ['Housing', -r.housing], ['Debt payments', -r.debt], ['Living costs', -r.living], ['Disposable income', r.disposable, 1]];
   $('per').innerHTML = '<thead><tr><th></th><th>Bi-weekly</th><th>Monthly</th><th>Yearly</th></tr></thead><tbody>' +
     lines.map(([n, v, t]) => `<tr class="${t ? 'total' : ''}"><td>${n}</td><td class="${v < 0 && t ? 'neg' : ''}">${usd(v / 26)}</td><td class="${v < 0 && t ? 'neg' : ''}">${usd(v / 12)}</td><td class="${v < 0 && t ? 'neg' : ''}">${usd(v)}</td></tr>`).join('') + '</tbody>';
@@ -353,11 +373,14 @@ function renderResults() {
 // ---------- Events ----------
 document.addEventListener('input', e => {
   const t = e.target;
-  if (t.id === 'housing') state.housing = t.value;
+  if (t.id === 'tipDed') state.tipDeduction = t.checked;
+  else if (t.id === 'housing') state.housing = t.value;
   else if (t.dataset.c) {
     const c = state.careers.find(x => x.id === t.dataset.c); if (!c) return;
     c[t.dataset.f] = t.value;
     const g = document.querySelector(`[data-gross="${c.id}"]`); if (g) g.textContent = usd(annualGross(c));
+    const tp = document.querySelector(`[data-tips="${c.id}"]`); if (tp) tp.textContent = usd(annualTips(c));
+    const tm = document.querySelector(`[data-tipsmo="${c.id}"]`); if (tm) tm.textContent = usd(annualTips(c) / 12);
   } else if (t.dataset.l) {
     const row = state[t.dataset.l].find(x => x.id === t.dataset.id); if (row) row[t.dataset.f] = t.value;
   } else return;
@@ -381,7 +404,7 @@ document.addEventListener('click', e => {
 });
 
 $('addCareer').onclick = () => {
-  state.careers.push({ id: nid(), name: 'New career', mode: 'salary', salary: 0, rate: 0, hours: 40, weeks: 52, bonus: 0, k401: 0, health: 0, housing: '' });
+  state.careers.push({ id: nid(), name: 'New career', mode: 'salary', salary: 0, rate: 0, hours: 40, weeks: 52, bonus: 0, k401: 0, health: 0, housing: '', tipDay: 0, tipDays: 5, tipWeeks: 50 });
   save(); renderCareers(); renderResults();
 };
 $('addDebt').onclick = () => { state.debts.push({ id: nid(), name: 'Debt', amount: 0 }); save(); listRows('debts'); };
