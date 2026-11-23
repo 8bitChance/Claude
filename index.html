@@ -75,7 +75,7 @@
 <body>
 <header>
   <h1>Household Disposable Income Planner</h1>
-  <p>Compare career combinations for you and your wife. Nevada (no state income tax), married filing jointly, estimates only. Data stays in this browser.</p>
+  <p>Compare career combinations for you and your partner. Nevada (no state income tax), each of you filing as single, estimates only. Data stays in this browser.</p>
 </header>
 
 <main>
@@ -86,15 +86,15 @@
       <button class="primary" data-add="you">+ Add career for you</button>
     </div>
     <div class="card">
-      <h2>Your wife's careers</h2>
+      <h2>Your partner's careers</h2>
       <div id="careers-wife"></div>
-      <button class="primary" data-add="wife">+ Add career for her</button>
+      <button class="primary" data-add="wife">+ Add career for partner</button>
     </div>
     <div class="card">
       <h2>Shared monthly expenses</h2>
       <label for="housing">Rent / mortgage</label>
       <input id="housing" type="number" min="0" step="50">
-      <p class="hint">If a career has a housing override (e.g. different city), your career's override is used first, then your wife's.</p>
+      <p class="hint">If a career has a housing override (e.g. different city), your career's override is used first, then your partner's.</p>
       <h3>Debt payments</h3>
       <div id="debts"></div>
       <button data-addl="debts">+ Add debt</button>
@@ -103,7 +103,7 @@
       <button data-addl="living">+ Add cost</button>
       <h3>Split of shared expenses</h3>
       <div class="row"><div><label for="youShare">Your share (%)</label><input id="youShare" type="number" min="0" max="100" step="1"></div>
-        <div><label>Wife's share</label><input id="wifeShare" disabled></div></div>
+        <div><label>Partner's share</label><input id="wifeShare" disabled></div></div>
       <p class="hint">Rent and shared debts/costs are split by these percentages for the per-person results. Default is 50/50.</p>
     </div>
     <div class="card">
@@ -112,7 +112,7 @@
       <h3>Living costs</h3><div id="you-living"></div><button data-addl="you.living">+ Add cost</button>
     </div>
     <div class="card">
-      <h2>Wife's personal monthly expenses</h2>
+      <h2>Partner's personal monthly expenses</h2>
       <h3>Debt payments</h3><div id="wife-debts"></div><button data-addl="wife.debts">+ Add debt</button>
       <h3>Living costs</h3><div id="wife-living"></div><button data-addl="wife.living">+ Add cost</button>
       <p class="hint">Reality check: most people underestimate living costs. Use your last 3 months of bank/card statements.</p>
@@ -121,7 +121,7 @@
       <h2>Tips tax treatment</h2>
       <label style="display:flex;gap:8px;align-items:flex-start;color:var(--ink);font-size:14px">
         <input type="checkbox" id="tipDed" style="width:auto;margin-top:3px">
-        <span>Apply federal "no tax on tips" deduction (up to $25,000, 2025&ndash;2028, phases out above $300k income for joint filers)</span></label>
+        <span>Apply federal "no tax on tips" deduction (up to $25,000, 2025&ndash;2028, phases out above $150k income for single filers)</span></label>
       <p class="hint">Only applies to qualifying tipped jobs (e.g. servers, bartenders, casino dealers), and only to income tax, not Social Security/Medicare. Tips must be reported. Turn off if unsure and confirm with a tax pro or the IRS guidance.</p>
     </div>
     <div class="card">
@@ -138,14 +138,14 @@
   <section id="results">
     <div class="card">
       <h2>Pairings: monthly disposable income</h2>
-      <p class="hint">Rows are <b>your</b> career, columns are <b>your wife's</b>. Click a cell to inspect it.</p>
+      <p class="hint">Rows are <b>your</b> career, columns are <b>your partner's</b>. Click a cell to inspect it.</p>
       <div id="grid" style="overflow-x:auto"></div>
     </div>
     <div class="card">
       <h2 id="selTitle">Selected scenario</h2>
       <div class="cards" id="stats"></div>
       <div id="flag"></div>
-      <h3>You vs. your wife</h3>
+      <h3>You vs. your partner</h3>
       <div class="seg" id="periodSeg" role="group" aria-label="Period">
         <button data-period="26">Bi-weekly</button><button data-period="12">Monthly</button><button data-period="1">Yearly</button></div>
       <div style="overflow-x:auto;margin-top:8px"><table class="per" id="who"></table></div>
@@ -160,23 +160,24 @@
       <h2>All pairings, ranked</h2>
       <div id="cmp"></div>
     </div>
-    <p class="disclaimer">Estimates, not tax advice. Uses 2026 federal brackets (MFJ), standard deduction, FICA. Ignores tax credits, itemized deductions, employer match, and self-employment tax. Update the <code>TAX</code> constants in this file each year.</p>
+    <p class="disclaimer">Estimates, not tax advice. Each person is taxed separately as a single filer using 2026 federal brackets, standard deduction, FICA. Ignores tax credits, itemized deductions, employer match, and self-employment tax. Update the <code>TAX</code> constants in this file each year.</p>
   </section>
 </main>
 
 <script>
-// ---------- Tax constants (2026, married filing jointly). Update yearly. ----------
+// ---------- Tax constants (2026, single filers). Update yearly. ----------
 const TAX = {
   year: 2026,
-  stdDeduction: 32200,
+  // Each person files SINGLE (unmarried). Update yearly.
+  stdDeduction: 16100,
   brackets: [ // [upper bound of bracket, rate]
-    [24800, .10], [100800, .12], [211400, .22], [403550, .24],
-    [512450, .32], [768700, .35], [Infinity, .37]
+    [12400, .10], [50400, .12], [105700, .22], [201775, .24],
+    [256225, .32], [640600, .35], [Infinity, .37]
   ],
   ssRate: .062, ssWageBase: 184500,
   // 'No tax on tips' federal income-tax deduction (2025-2028). Does NOT reduce FICA.
-  tipDeductionMax: 25000, tipPhaseoutStartMFJ: 300000, tipPhaseoutPer1000: 100,
-  medicareRate: .0145, addlMedicareRate: .009, addlMedicareThresholdMFJ: 250000
+  tipDeductionMax: 25000, tipPhaseoutStart: 150000, tipPhaseoutPer1000: 100,
+  medicareRate: .0145, addlMedicareRate: .009, addlMedicareThreshold: 200000
 };
 
 // ---------- Pure calculation ----------
@@ -190,16 +191,6 @@ function annualGross(c) {
   return base + num(c.bonus) + annualTips(c);
 }
 
-function personCalc(c) {
-  const gross = annualGross(c), tips = annualTips(c);
-  const k401 = c ? (gross - tips) * Math.min(100, num(c.k401)) / 100 : 0; // 401(k) assumed on wages, not tips
-  const health = c ? Math.min(gross, num(c.health) * 12) : 0;
-  const ficaWages = gross - health; // 401(k) deferrals are still FICA wages; Section 125 health is not
-  const ss = Math.min(ficaWages, TAX.ssWageBase) * TAX.ssRate;
-  const medicare = ficaWages * TAX.medicareRate;
-  return { gross, tips, k401, health, ficaWages, ss, medicare };
-}
-
 function federalTax(taxable) {
   let tax = 0, lower = 0;
   for (const [upper, rate] of TAX.brackets) {
@@ -209,21 +200,29 @@ function federalTax(taxable) {
   return tax;
 }
 
-function calc(careerA, careerB, exp) {
-  const a = personCalc(careerA), b = personCalc(careerB);
-  const gross = a.gross + b.gross;
-  const k401 = a.k401 + b.k401, health = a.health + b.health;
-  const tips = a.tips + b.tips;
+// One person's taxes, filed as single.
+function personCalc(c, tipDeduction) {
+  const gross = annualGross(c), tips = annualTips(c);
+  const k401 = c ? (gross - tips) * Math.min(100, num(c.k401)) / 100 : 0; // 401(k) assumed on wages, not tips
+  const health = c ? Math.min(gross, num(c.health) * 12) : 0;
+  const ficaWages = gross - health; // 401(k) deferrals are still FICA wages; Section 125 health is not
+  const ss = Math.min(ficaWages, TAX.ssWageBase) * TAX.ssRate;
+  const medicare = ficaWages * TAX.medicareRate + Math.max(0, ficaWages - TAX.addlMedicareThreshold) * TAX.addlMedicareRate;
   let tipDed = 0;
-  if (exp.tipDeduction && tips > 0) {
-    const over = Math.max(0, gross - TAX.tipPhaseoutStartMFJ);
+  if (tipDeduction && tips > 0) {
+    const over = Math.max(0, gross - TAX.tipPhaseoutStart);
     tipDed = Math.max(0, Math.min(tips, TAX.tipDeductionMax) - Math.ceil(over / 1000) * TAX.tipPhaseoutPer1000);
   }
   const taxable = Math.max(0, gross - k401 - health - TAX.stdDeduction - tipDed);
   const fed = federalTax(taxable);
-  const addl = Math.max(0, a.ficaWages + b.ficaWages - TAX.addlMedicareThresholdMFJ) * TAX.addlMedicareRate;
-  const fica = a.ss + b.ss + a.medicare + b.medicare + addl;
-  const net = gross - k401 - health - fed - fica; // annual take-home
+  const fica = ss + medicare;
+  return { gross, tips, tipDed, k401, health, fed, fica, net: gross - k401 - health - fed - fica };
+}
+
+function calc(careerA, careerB, exp) {
+  const a = personCalc(careerA, exp.tipDeduction), b = personCalc(careerB, exp.tipDeduction);
+  const gross = a.gross + b.gross, net = a.net + b.net;
+  const k401 = a.k401 + b.k401, health = a.health + b.health;
   const ov = (careerA && num(careerA.housing)) || (careerB && num(careerB.housing)) || 0;
   const housing = (ov || num(exp.housing)) * 12;
   const sum = l => (l || []).reduce((s, d) => s + num(d.amount), 0) * 12;
@@ -233,21 +232,16 @@ function calc(careerA, careerB, exp) {
   const living = sharedLiving + sum(P.you.living) + sum(P.wife.living);
   const disposable = net - housing - debt - living;
 
-  // Per-person split. Fed tax is allocated by each person's pre-tax income; Addl. Medicare by FICA wages.
-  const baseA = a.gross - a.k401 - a.health, baseB = b.gross - b.k401 - b.health;
-  const fShare = baseA + baseB > 0 ? baseA / (baseA + baseB) : 0.5;
-  const wShare = a.ficaWages + b.ficaWages > 0 ? a.ficaWages / (a.ficaWages + b.ficaWages) : 0.5;
   const youPct = Math.min(100, num(exp.youShare)) / 100;
   const sharedTotal = housing + sharedDebt + sharedLiving;
-  const person = (x, pe, fS, wS, pct) => {
-    const f = fed * fS, fi = x.ss + x.medicare + addl * wS;
-    const n = x.gross - x.k401 - x.health - f - fi;
+  const person = (x, pe, pct) => {
     const personal = sum(pe.debts) + sum(pe.living), shared = sharedTotal * pct;
-    return { gross: x.gross, k401: x.k401, health: x.health, fed: f, fica: fi, net: n, personal, shared, disposable: n - personal - shared };
+    return Object.assign({}, x, { personal, shared, disposable: x.net - personal - shared });
   };
-  return { gross, tips, tipDed, k401, health, fed, fica, net, housing, debt, living, disposable,
+  return { gross, tips: a.tips + b.tips, tipDed: a.tipDed + b.tipDed, k401, health, fed: a.fed + b.fed, fica: a.fica + b.fica,
+           net, housing, debt, living, disposable,
            monthly: disposable / 12, savingsRate: net > 0 ? disposable / net : 0,
-           you: person(a, P.you, fShare, wShare, youPct), wife: person(b, P.wife, 1 - fShare, 1 - wShare, 1 - youPct) };
+           you: person(a, P.you, youPct), wife: person(b, P.wife, 1 - youPct) };
 }
 
 // ---------- State ----------
@@ -373,14 +367,14 @@ function renderResults() {
     const sel = state.you === a.id && state.wife === b.id;
     return `<td><button class="cell" data-pa="${a.id}" data-pb="${b.id}" aria-pressed="${sel}" style="background:${colorFor(r.monthly, maxAbs)}">${usd(r.monthly)}</button></td>`;
   }).join('') + '</tr>').join('');
-  $('grid').innerHTML = `<table class="grid"><thead><tr><th class="rh">You ↓ / Wife →</th>${head}</tr></thead><tbody>${body}</tbody></table>`;
+  $('grid').innerHTML = `<table class="grid"><thead><tr><th class="rh">You ↓ / Partner →</th>${head}</tr></thead><tbody>${body}</tbody></table>`;
 
   // selected scenario
   if (!rowOpts.some(o => o.id === state.you)) state.you = 'none';
   if (!colOpts.some(o => o.id === state.wife)) state.wife = 'none';
   const A = careerById(state.you), B = careerById(state.wife);
   const r = calc(A, B, exp());
-  $('selTitle').textContent = `You: ${A.name}  +  Wife: ${B.name}`;
+  $('selTitle').textContent = `You: ${A.name}  +  Partner: ${B.name}`;
   const cls = v => v < 0 ? 'neg' : 'pos';
   $('stats').innerHTML = [
     ['Disposable / month', `<span class="${cls(r.monthly)}">${usd(r.monthly)}</span>`],
@@ -399,11 +393,11 @@ function renderResults() {
 
   const per = state.period || 12, pName = { 26: 'bi-weekly', 12: 'monthly', 1: 'yearly' }[per];
   document.querySelectorAll('[data-period]').forEach(b => b.setAttribute('aria-pressed', String(+b.dataset.period === per)));
-  const wl = [['Gross pay', x => x.gross], ['Federal tax (allocated)', x => -x.fed], ['FICA', x => -x.fica], ['401(k) + health', x => -(x.k401 + x.health)],
+  const wl = [['Gross pay', x => x.gross], ['Federal tax', x => -x.fed], ['FICA', x => -x.fica], ['401(k) + health', x => -(x.k401 + x.health)],
     ['Take-home', x => x.net, 1], ['Share of shared expenses', x => -x.shared], ['Personal expenses', x => -x.personal], ['Disposable income', x => x.disposable, 1]];
   const hh = { gross: r.gross, fed: r.fed, fica: r.fica, k401: r.k401, health: r.health, net: r.net, shared: r.housing + (r.debt + r.living - r.you.personal - r.wife.personal), personal: r.you.personal + r.wife.personal, disposable: r.disposable };
   const cell = (v, t) => `<td class="${t && v < 0 ? 'neg' : ''}">${usd(v / per)}</td>`;
-  $('who').innerHTML = `<thead><tr><th>${pName}</th><th>You</th><th>Wife</th><th>Household</th></tr></thead><tbody>` +
+  $('who').innerHTML = `<thead><tr><th>${pName}</th><th>You</th><th>Partner</th><th>Household</th></tr></thead><tbody>` +
     wl.map(([n, f, t]) => `<tr class="${t ? 'total' : ''}"><td>${n}</td>${cell(f(r.you), t)}${cell(f(r.wife), t)}${cell(f(hh), t)}</tr>`).join('') + '</tbody>';
 
   let flag = '';
